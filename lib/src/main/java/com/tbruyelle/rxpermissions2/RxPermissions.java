@@ -16,6 +16,8 @@ package com.tbruyelle.rxpermissions2;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.support.annotation.NonNull;
 import android.support.annotation.VisibleForTesting;
@@ -23,6 +25,7 @@ import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.text.TextUtils;
+import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,13 +43,17 @@ public class RxPermissions {
 
     @VisibleForTesting
     Lazy<RxPermissionsFragment> mRxPermissionsFragment;
+    private boolean mLogging;
+    private Context context;
 
     public RxPermissions(@NonNull final FragmentActivity activity) {
         mRxPermissionsFragment = getLazySingleton(activity.getSupportFragmentManager());
+        this.context = activity;
     }
 
     public RxPermissions(@NonNull final Fragment fragment) {
         mRxPermissionsFragment = getLazySingleton(fragment.getChildFragmentManager());
+        this.context = fragment.getContext();
     }
 
     @NonNull
@@ -84,6 +91,7 @@ public class RxPermissions {
     }
 
     public void setLogging(boolean logging) {
+        this.mLogging=true;
         mRxPermissionsFragment.get().setLogging(logging);
     }
 
@@ -222,6 +230,13 @@ public class RxPermissions {
         return Observable.merge(trigger, pending);
     }
 
+
+    void log(String message) {
+        if (mLogging) {
+            Log.d(RxPermissions.TAG, message);
+        }
+    }
+
     @TargetApi(Build.VERSION_CODES.M)
     private Observable<Permission> requestImplementation(final String... permissions) {
         List<Observable<Permission>> list = new ArrayList<>(permissions.length);
@@ -230,7 +245,7 @@ public class RxPermissions {
         // In case of multiple permissions, we create an Observable for each of them.
         // At the end, the observables are combined to have a unique response.
         for (String permission : permissions) {
-            mRxPermissionsFragment.get().log("Requesting permission " + permission);
+            log("Requesting permission " + permission);
             if (isGranted(permission)) {
                 // Already granted, or not Android M
                 // Return a granted Permission object.
@@ -294,7 +309,7 @@ public class RxPermissions {
 
     @TargetApi(Build.VERSION_CODES.M)
     void requestPermissionsFromFragment(String[] permissions) {
-        mRxPermissionsFragment.get().log("requestPermissionsFromFragment " + TextUtils.join(", ", permissions));
+        log("requestPermissionsFromFragment " + TextUtils.join(", ", permissions));
         mRxPermissionsFragment.get().requestPermissions(permissions);
     }
 
@@ -305,7 +320,7 @@ public class RxPermissions {
      */
     @SuppressWarnings("WeakerAccess")
     public boolean isGranted(String permission) {
-        return !isMarshmallow() || mRxPermissionsFragment.get().isGranted(permission);
+        return !isMarshmallow() || context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED;
     }
 
     /**
@@ -315,7 +330,7 @@ public class RxPermissions {
      */
     @SuppressWarnings("WeakerAccess")
     public boolean isRevoked(String permission) {
-        return isMarshmallow() && mRxPermissionsFragment.get().isRevoked(permission);
+        return isMarshmallow() && context.getPackageManager().isPermissionRevokedByPolicy(permission, context.getPackageName());
     }
 
     boolean isMarshmallow() {
@@ -325,6 +340,7 @@ public class RxPermissions {
     void onRequestPermissionsResult(String permissions[], int[] grantResults) {
         mRxPermissionsFragment.get().onRequestPermissionsResult(permissions, grantResults, new boolean[permissions.length]);
     }
+
 
     @FunctionalInterface
     public interface Lazy<V> {
